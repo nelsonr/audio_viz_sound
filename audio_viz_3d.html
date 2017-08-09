@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Audio Visualization 3D</title>
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <style>
+        body {
+            margin: 0;
+        }
+
+        .message {
+            position: absolute;
+            top: 10px;
+            width: 100%;
+            text-align: center;
+            color: #FFF;
+            font-family: sans-serif;
+            font-size: 0.9em;
+        }
+
+        .copy {
+            position: absolute;
+            bottom: 10px;
+            width: 100%;
+            text-align: center;
+            color: #FFF;
+            font-family: sans-serif;
+            font-size: 0.75em;
+        }
+    </style>
+</head>
+<body>
+    <div class="message">Click the page to start!</div>
+
+    <div class="copy">Music: Amaterasu by Cutside</div>
+
+    <script src="js/three.min.js"></script>
+    <script>
+        // ----------------------------------
+        // audio code
+        // ----------------------------------
+
+        /* Setup an AudioContext, default to the non-prefixed version if possible. */
+        var context
+          , audio
+          , processor
+          , analyser
+          , data
+          , delta = 0;
+
+        /* Try instantiating a new AudioContext, throw an error if it fails. */
+        try {
+            /* Setup an AudioContext. */
+            context = new AudioContext();
+
+            /* Create a script processor node with a `bufferSize` of 1024. */
+            processor = context.createScriptProcessor(1024);
+
+            /* Create an analyser node */
+            analyser = context.createAnalyser();
+
+            /* Wire the processor into our audio context. */
+            processor.connect(context.destination);
+
+            /* Wire the analyser into the processor */
+            analyser.connect(processor);
+
+            /* Define a Uint8Array to receive the analysers data. */
+            data = new Uint8Array(analyser.frequencyBinCount);
+        } catch(e) {
+            throw new Error('The Web Audio API is unavailable');
+        }
+
+        var Sound = {
+            element: undefined,
+            init: false,
+
+            play: function() {
+                if (this.init === false) {
+                    var sound = context.createMediaElementSource(this.element);
+
+                    this.element.onended = function() {
+                        sound.disconnect();
+                        sound = null;
+
+                        /* Noop the audioprocess handler when the file finishes. */
+                        processor.onaudioprocess = function() {};
+                    }
+
+                    /* Add the following line to wire into the analyser. */
+                    sound.connect(analyser);
+                    sound.connect(context.destination);
+
+                    processor.onaudioprocess = function() {
+                        /* Populate the data array with the frequency data. */
+                        analyser.getByteTimeDomainData(data);
+                    };
+
+                    this.init = true;
+                }
+
+                this.element.play();
+            },
+
+            pause: function() {
+                this.element.pause();
+            },
+
+            paused: function() {
+                return this.element.paused;
+            }
+        };
+
+        function loadAudioElement(url) {
+            return new Promise(function(resolve, reject) {
+                var audio = new Audio(); // audio DOM element, same as createElement('audio')
+
+                audio.src = url;
+
+                audio.addEventListener('canplay', function() {
+                    resolve(audio);
+                });
+
+                audio.addEventListener('error', reject);
+            });
+        }
+
+        // ----------------------------------
+        // visualization code
+        // ----------------------------------
+
+        const NUM_OF_SLICES = 3
+            , STEP = Math.floor(data.length / NUM_OF_SLICES)
+            , NO_SIGNAL = 160;
+
+        var scene = new THREE.Scene();
+        var camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+
+        var renderer = new THREE.WebGLRenderer();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setClearColor(0xEEEEEE, 0.2);
+        document.body.appendChild(renderer.domElement);
+
+        // this defines the shape of the geometry, in this case a cube
+        var geometry = new THREE.BoxGeometry(1, 1, 1);
+
+        // materials are what give color to geometries, mix the two together
+        var redMaterial = new THREE.MeshLambertMaterial({color: 0xff5555});
+        var redCube = new THREE.Mesh(geometry, redMaterial);
+        redCube.position.x = -1.5;
+
+        var greenMaterial = new THREE.MeshLambertMaterial({color: 0x55ff55});
+        var greenCube = new THREE.Mesh(geometry, greenMaterial);
+        greenCube.position.x = 0;
+
+        var blueMaterial = new THREE.MeshLambertMaterial({color: 0x5555ff});
+        var blueCube = new THREE.Mesh(geometry, blueMaterial);
+        blueCube.position.x = 1.5;
+
+        // add cubes to scene
+        scene.add(redCube);
+        scene.add(greenCube);
+        scene.add(blueCube);
+
+        // Base lighting
+        var light = new THREE.PointLight(0xffeeee, 1, 100, 2);
+        light.position.set(-10, 5, 5);
+        scene.add(light);
+
+        // Ambient light
+        scene.add(new THREE.AmbientLight(0xbfbfbf));
+
+        function render() {
+          requestAnimationFrame(render);
+
+          redCube.scale.y -= 0.85;
+          greenCube.scale.y -= 0.85;
+          blueCube.scale.y -= 0.85;
+
+          redCube.rotation.y += 0.01;
+          redCube.scale.y += Math.abs(data[0]) / NO_SIGNAL;
+          if (redCube.scale.y <= 1) {
+            redCube.scale.y = 1;
+          }
+          redCube.position.y = (redCube.scale.y / 2) - 0.5;
+
+          greenCube.rotation.y += 0.01;
+          greenCube.scale.y += Math.abs(data[STEP]) / NO_SIGNAL;
+          if (greenCube.scale.y <= 1) {
+            greenCube.scale.y = 1;
+          }
+          greenCube.position.y = (greenCube.scale.y / 2) - 0.5;
+
+          blueCube.rotation.y += 0.01;
+          blueCube.scale.y += Math.abs(data[STEP*2]) / NO_SIGNAL;
+          if (blueCube.scale.y <= 1) {
+            blueCube.scale.y = 1;
+          }
+          blueCube.position.y = (blueCube.scale.y / 2) - 0.5;
+
+          delta += 0.002;
+
+          camera.lookAt(new THREE.Vector3(0,0,0));
+          camera.position.x = Math.sin(delta) * 4;
+          camera.position.y = Math.cos(delta) * 4;
+          camera.position.z = Math.cos(delta) * 5;
+
+          renderer.render(scene, camera);
+        }
+
+        render();
+
+        loadAudioElement('/audio/Cutside_-_08_-_Amaterasu.mp3').then(function(elem) {
+            audio = Object.create(Sound);
+            audio.element = elem;
+            audio.play();
+        }, function(elem) {
+            throw 'Failed to load audio';
+        });
+
+        // Pause / play audio on page click
+        document.body.addEventListener('click', function(ev) {
+            if (audio) {
+                if (audio.paused()) {
+                    audio.play();
+                } else {
+                    audio.pause();
+                }
+            }
+        })
+    </script>
+</body>
+</html>

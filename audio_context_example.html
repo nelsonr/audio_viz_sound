@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<title>Audio Context Example</title>
+</head>
+<body>
+	<script>
+		/* Setup an AudioContext, default to the non-prefixed version if possible. */
+		var context;
+
+		/* Try instantiating a new AudioContext, throw an error if it fails. */
+		try {
+		    /* Setup an AudioContext. */
+		    context = new AudioContext();
+		} catch(e) {
+		    throw new Error('The Web Audio API is unavailable');
+		}
+
+		/* Create a new XHR object. */
+		var xhr = new XMLHttpRequest();
+
+		/* Open a GET request connection to the .mp3 */
+		xhr.open('GET', '/audio/Cutside_-_08_-_Amaterasu.mp3', true);
+
+		/* Set the XHR responseType to arraybuffer */
+		xhr.responseType = 'arraybuffer';
+
+		xhr.onload = function() {
+		    /* The files arraybuffer is available at xhr.response */
+		    sound = context.createBufferSource();
+
+	        context.decodeAudioData(xhr.response, function(buffer) {
+	            /* Set the buffer to our decoded AudioBuffer. */
+	            sound.buffer = buffer;
+	            /* Wire the AudioBufferSourceNode into the AudioContext */
+	            sound.connect(context.destination);
+	            sound.start();
+	        });
+		};
+
+		xhr.send();
+	</script>
+</body>
+</html>
